@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco Ruta - Granada Nicaragua</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* ✅ INTERFAZ ORIGINAL INTACTA */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { display: flex; height: 100vh; background: #f4f6f9; }
+        
+        #sidebar { width: 380px; background: #fff; padding: 20px; overflow-y: auto; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; gap: 15px; }
+        #map { flex: 1; }
+        
+        .logo-container { text-align: center; padding-bottom: 15px; border-bottom: 2px solid #e3f2fd; margin-bottom: 5px; }
+        .logo-container img { max-width: 200px; height: auto; }
+        
+        .search-box { position: relative; }
+        .search-row { display: flex; gap: 8px; }
+        .search-row input { flex: 1; }
+        input { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
+        input:focus { border-color: #8B1A2B; outline: none; }
+        
+        .btn { padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; width: 100%; }
+        .btn-location { background: #1976d2; color: #fff; font-weight: bold; margin-bottom: 10px; }
+        .btn-location:hover { background: #1565c0; }
+        
+        .btn-search { background: #8B1A2B; color: #fff; white-space: nowrap; width: auto; padding: 12px 16px; }
+        .btn-search:hover:not(:disabled) { background: #6B1521; }
+        .btn-primary { background: #333; color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: #1a1a1a; }
+        .btn-warning { background: #8B1A2B; color: #fff; }
+        .btn-warning:hover:not(:disabled) { background: #6B1521; }
+        .btn-danger { background: #555; color: #fff; }
+        .btn:disabled { background: #bdbdbd; cursor: not-allowed; }
+        
+        .status { padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; background: #f5f5f5; color: #333; }
+        .status.error { background: #ffebee; color: #c62828; }
+        
+        .options-list { background: #f5f5f5; border-radius: 8px; padding: 8px; max-height: 150px; overflow-y: auto; }
+        .option-item { padding: 8px; cursor: pointer; border-radius: 6px; font-size: 13px; border-bottom: 1px solid #e0e0e0; }
+        .option-item:last-child { border-bottom: none; }
+        .option-item:hover, .option-item.active { background: #f0e6e8; font-weight: 600; }
+        
+        .destinos-list { list-style: none; max-height: 200px; overflow-y: auto; }
+        .destinos-list li { padding: 10px; background: #fafafa; margin-bottom: 6px; border-radius: 6px; border-left: 4px solid #8B1A2B; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .delete-btn { background: #ef5350; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: #fff; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .modal h3 { color: #8B1A2B; margin-bottom: 10px; }
+        .modal p { font-size: 14px; margin-bottom: 15px; color: #555; }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btns button { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-accept { background: #8B1A2B; color: #fff; }
+        .btn-cancel { background: #757575; color: #fff; }
+        
+        .badge-granada { position: absolute; top: 10px; right: 10px; background: #fff; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 1000; color: #8B1A2B; border: 2px solid #8B1A2B; }
+        
+        .leaflet-control-zoom { border: 2px solid #8B1A2B !important; }
+        .leaflet-control-zoom a { color: #8B1A2B !important; }
+        
+        /* Loading spinner */
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div class="logo-container">
+            <img src="logo.jpeg" alt="Eco Ruta Granada Nicaragua">
+        </div>
+        
+        <button class="btn btn-location" onclick="obtenerUbicacionActual()">
+             MI UBICACIÓN ACTUAL
+        </button>
+
+        <div class="search-box">
+            <div class="search-row">
+                <input type="text" id="inputLugar" placeholder="Ej: Farmacia, Parque Central...">
+                <button type="button" id="btnBuscar" class="btn btn-search" onclick="buscarLugar()"> Buscar</button>
+            </div>
+        </div>
+        
+        <div id="statusMsg" class="status">💡 Escribe un lugar o usa tu GPS</div>
+        
+        <button id="btnAgregar" class="btn btn-primary" onclick="agregarDestino()" disabled>✅ Agregar Destino</button>
+        
+        <h3 style="font-size:16px; color:#333;">📋 Destinos (<span id="contador">0</span>)</h3>
+        <ul id="listaDestinos" class="destinos-list"></ul>
+        
+        <!-- ✅ Se activará con 2 o más destinos (suficiente para usar la app) -->
+        <button id="btnOptimizar" class="btn btn-warning" onclick="optimizarYMostrar()" disabled>
+            🚀 CALCULAR Y VER RUTA
+        </button>
+        
+        <button class="btn btn-danger" onclick="limpiarTodo()">🗑️ Limpiar Todo</button>
+    </div>
+    
+    <div id="map">
+        <div class="badge-granada">📍 Eco Ruta Granada</div>
+    </div>
+
+    <div id="modalSugerencia" class="modal-overlay">
+        <div class="modal">
+            <h3>💡 Sugerencia de Sucursal</h3>
+            <p id="textoSugerencia"></p>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="rechazarSugerencia()">Elegir otra</button>
+                <button class="btn-accept" onclick="aceptarSugerencia()">✅ Usar esta</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const GRANADA_BOUNDS = [[11.87, -86.03], [11.99, -85.89]];
+        let destinos = [];
+        let tempSeleccion = null;
+        let marcadoresMapa = [];
+        let rutaLinea = null;
+        let miUbicacion = null;
+
+        const map = L.map('map', {
+            center: [11.9280, -85.9580],
+            zoom: 16,
+            minZoom: 13,
+            maxZoom: 19,
+            maxBounds: GRANADA_BOUNDS,
+            maxBoundsViscosity: 1.0,
+            zoomControl: true
+        });
+
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        function obtenerUbicacionActual() {
+            if (!navigator.geolocation) {
+                mostrarEstado(' Tu navegador no soporta GPS', 'error');
+                return;
+            }
+            mostrarEstado('📡 Buscando tu ubicación...', 'normal');
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    miUbicacion = { lat, lon };
+                    map.setView([lat, lon], 17);
+                    if (window.miMarker) map.removeLayer(window.miMarker);
+                    var myIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: "<div style='background-color:#1976d2; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,0.3);'></div>",
+                        iconSize: [20, 20], iconAnchor: [10, 10]
+                    });
+                    window.miMarker = L.marker([lat, lon], {icon: myIcon}).addTo(map)
+                        .bindPopup('<b> Estás aquí</b>').openPopup();
+                    mostrarEstado('✅ Ubicación detectada. Busca tus destinos.', 'normal');
+                },
+                () => mostrarEstado('❌ No se pudo obtener la ubicación.', 'error')
+            );
+        }
+
+        async function buscarLugar() {
+            const query = document.getElementById('inputLugar').value.trim();
+            if (!query) return;
+            mostrarEstado('🔍 Buscando...', 'normal');
+            document.getElementById('opcionesContainer')?.remove();
+            tempSeleccion = null;
+            document.getElementById('btnAgregar').disabled = true;
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&viewbox=-86.03,11.99,-85.89,11.87&bounded=1&limit=5&accept-language=es`;
+                const res = await fetch(url, { headers: { 'User-Agent': 'EcoRutaApp/1.0' } });
+                const data = await res.json();
+                if (!data.length) { mostrarEstado('❌ No encontrado en Granada.', 'error'); return; }
+                procesarResultados(data);
+            } catch (e) { mostrarEstado('❌ Error conexión.', 'error'); }
+        }
+
+        function procesarResultados(resultados) {
+            const container = document.createElement('div');
+            container.id = 'opcionesContainer';
+            container.className = 'options-list';
+            if (resultados.length === 1) { seleccionarUnico(resultados[0]); } 
+            else {
+                resultados.forEach((r, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'option-item';
+                    div.textContent = `📍 ${r.display_name.split(',').slice(0,2).join(',')}`;
+                    div.onclick = () => seleccionarOpcion(i, resultados);
+                    container.appendChild(div);
+                });
+                document.querySelector('.search-box').appendChild(container);
+                mostrarEstado(`✅ Selecciona uno:`, 'normal');
+            }
+        }
+
+        function seleccionarOpcion(index, resultados) {
+            document.querySelectorAll('.option-item').forEach((el, i) => el.classList.toggle('active', i === index));
+            seleccionarUnico(resultados[index]);
+        }
+
+        function seleccionarUnico(resultado) {
+            tempSeleccion = {
+                nombre: resultado.display_name.split(',')[0],
+                direccion: resultado.display_name,
+                lat: parseFloat(resultado.lat),
+                lon: parseFloat(resultado.lon)
+            };
+            map.setView([tempSeleccion.lat, tempSeleccion.lon], 17);
+            if (window.tempMarker) map.removeLayer(window.tempMarker);
+            window.tempMarker = L.marker([tempSeleccion.lat, tempSeleccion.lon]).addTo(map)
+                .bindPopup(`<b>${tempSeleccion.nombre}</b>`).openPopup();
+            document.getElementById('opcionesContainer')?.remove();
+            document.getElementById('btnAgregar').disabled = false;
+            mostrarEstado('✅ Ubicación lista.', 'normal');
+        }
+
+        function mostrarEstado(msg, tipo) {
+            const el = document.getElementById('statusMsg');
+            el.textContent = msg;
+            el.className = `status ${tipo === 'error' ? 'error' : ''}`;
+        }
+
+        function agregarDestino() {
+            if (!tempSeleccion) return;
+            destinos.push({...tempSeleccion});
+            const marker = L.marker([tempSeleccion.lat, tempSeleccion.lon]).addTo(map)
+                .bindPopup(`<b>${destinos.length}. ${tempSeleccion.nombre}</b>`);
+            marcadoresMapa.push(marker);
+            renderLista();
+            document.getElementById('inputLugar').value = '';
+            tempSeleccion = null;
+            document.getElementById('btnAgregar').disabled = true;
+            mostrarEstado(' Agrega otro.', 'normal');
+            // ✅ Se habilita con 2 o más destinos (suficiente para operar)
+            if (destinos.length >= 2) document.getElementById('btnOptimizar').disabled = false;
+        }
+
+        function renderLista() {
+            const ul = document.getElementById('listaDestinos');
+            ul.innerHTML = '';
+            destinos.forEach((d, i) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${i+1}. ${d.nombre}</span> <button class="delete-btn" onclick="eliminarDestino(${i})">✕</button>`;
+                ul.appendChild(li);
+            });
+            document.getElementById('contador').textContent = destinos.length;
+            if (destinos.length < 2) document.getElementById('btnOptimizar').disabled = true;
+        }
+
+        function eliminarDestino(index) {
+            destinos.splice(index, 1);
+            map.removeLayer(marcadoresMapa[index]);
+            marcadoresMapa.splice(index, 1);
+            renderLista();
+        }
+
+        // ✅ LÓGICA MEJORADA: Cumple Objetivo 1 del documento
+        async function optimizarYMostrar() {
+            if (destinos.length < 2) return;
+            mostrarEstado('🔄 Optimizando ruta...', 'normal');
+            
+            // 1. Construir ruta inicial (inicio + destinos)
+            let ruta = miUbicacion 
+                ? [{ nombre: "📍 Tu Ubicación", lat: miUbicacion.lat, lon: miUbicacion.lon }, ...destinos]
+                : [...destinos];
+
+            // 2. Aplicar optimización 2-Opt si hay 3+ puntos (con 2 ya es óptima)
+            if (ruta.length >= 3) {
+                ruta = optimizarRuta2Opt(ruta);
+            }
+
+            window.rutaCalculada = ruta;
+            
+            // 3. Obtener ruta real por calles usando OSRM
+            await obtenerRutaRealPorCalles(ruta);
+        }
+
+        // ✅ Algoritmo 2-Opt: Reordena inteligentemente para minimizar distancia/tiempo
+        function optimizarRuta2Opt(ruta) {
+            let mejorado = true;
+            let rutaOpt = [...ruta];
+            while (mejorado) {
+                mejorado = false;
+                for (let i = 1; i < rutaOpt.length - 2; i++) {
+                    for (let j = i + 1; j < rutaOpt.length - 1; j++) {
+                        const distAntes = haversine(rutaOpt[i-1].lat, rutaOpt[i-1].lon, rutaOpt[i].lat, rutaOpt[i].lon) +
+                                          haversine(rutaOpt[j].lat, rutaOpt[j].lon, rutaOpt[j+1].lat, rutaOpt[j+1].lon);
+                        const distDespues = haversine(rutaOpt[i-1].lat, rutaOpt[i-1].lon, rutaOpt[j].lat, rutaOpt[j].lon) +
+                                            haversine(rutaOpt[i].lat, rutaOpt[i].lon, rutaOpt[j+1].lat, rutaOpt[j+1].lon);
+                        if (distDespues < distAntes - 0.0001) {
+                            const segmento = rutaOpt.slice(i, j + 1).reverse();
+                            rutaOpt.splice(i, j - i + 1, ...segmento);
+                            mejorado = true;
+                        }
+                    }
+                }
+            }
+            return rutaOpt;
+        }
+
+        // ✅ NUEVA FUNCIÓN: Obtener ruta real siguiendo las calles usando OSRM API
+        async function obtenerRutaRealPorCalles(ruta) {
+            mostrarEstado('🗺️ Calculando ruta por calles...', 'normal');
+            
+            try {
+                // Construir coordenadas para OSRM
+                const coordenadas = ruta.map(p => `${p.lon},${p.lat}`).join(';');
+                
+                // Llamar a OSRM API (servidor público)
+                const url = `https://router.project-osrm.org/route/v1/foot/${coordenadas}?overview=full&geometries=geojson&steps=false`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+                    throw new Error('No se pudo obtener la ruta');
+                }
+                
+                const route = data.routes[0];
+                const distanciaTotal = route.distance / 1000; // metros a km
+                const tiempoSegundos = route.duration;
+                const tiempoMinutos = Math.round(tiempoSegundos / 60);
+                
+                // Obtener geometría de la ruta (coordenadas reales de las calles)
+                const coordenadasRuta = route.geometry.coordinates.map(coord => [coord[1], coord[0]]); // [lat, lon]
+                
+                // Calcular métricas reales
+                window.rutaCalculada = {
+                    puntos: ruta,
+                    distancia: distanciaTotal,
+                    tiempo: tiempoMinutos,
+                    geometriaCalles: coordenadasRuta
+                };
+                
+                mostrarEstado(`✅ Ruta optimizada: ${distanciaTotal.toFixed(2)} km (~${tiempoMinutos} min)`, 'normal');
+                
+                // Dibujar ruta en el mapa
+                setTimeout(() => dibujarRutaReal(), 200);
+                
+            } catch (error) {
+                console.error('Error obteniendo ruta:', error);
+                mostrarEstado('❌ Error al calcular ruta. Intenta de nuevo.', 'error');
+                // Fallback: dibujar línea recta si falla OSRM
+                dibujarRutaFallback();
+            }
+        }
+
+        // ✅ Dibujar ruta siguiendo las calles reales
+        function dibujarRutaReal() {
+            if (!window.rutaCalculada || !window.rutaCalculada.geometriaCalles) return;
+            
+            if (rutaLinea) map.removeLayer(rutaLinea);
+            
+            // Dibujar polyline con la geometría real de las calles
+            rutaLinea = L.polyline(window.rutaCalculada.geometriaCalles, {
+                color: '#8B1A2B',
+                weight: 5,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+            
+            // Ajustar vista del mapa para mostrar toda la ruta
+            map.fitBounds(rutaLinea.getBounds(), { padding: [30, 30], maxZoom: 16 });
+        }
+
+        // Fallback: dibujar línea recta si OSRM falla
+        function dibujarRutaFallback() {
+            if (!window.rutaCalculada || !window.rutaCalculada.puntos) return;
+            if (rutaLinea) map.removeLayer(rutaLinea);
+            
+            const puntos = window.rutaCalculada.puntos.map(d => [d.lat, d.lon]);
+            rutaLinea = L.polyline(puntos, { 
+                color: '#8B1A2B', 
+                weight: 5, 
+                opacity: 0.85, 
+                dashArray: '12, 8' 
+            }).addTo(map);
+            
+            map.fitBounds(rutaLinea.getBounds(), { padding: [30, 30], maxZoom: 16 });
+            
+            // Calcular distancia aproximada
+            let distanciaTotal = 0;
+            for (let i = 0; i < puntos.length - 1; i++) {
+                distanciaTotal += haversine(puntos[i][0], puntos[i][1], puntos[i+1][0], puntos[i+1][1]);
+            }
+            mostrarEstado(`⚠️ Ruta aproximada: ${distanciaTotal.toFixed(2)} km`, 'normal');
+        }
+
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2-lat1)*Math.PI/180;
+            const dLon = (lon2-lon1)*Math.PI/180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        function limpiarTodo() {
+            if (!confirm('¿Borrar todo?')) return;
+            destinos = []; 
+            marcadoresMapa.forEach(m => map.removeLayer(m)); 
+            marcadoresMapa = [];
+            if (rutaLinea) map.removeLayer(rutaLinea);
+            if (window.miMarker) map.removeLayer(window.miMarker);
+            miUbicacion = null;
+            renderLista();
+            document.getElementById('btnOptimizar').disabled = true;
+            document.getElementById('inputLugar').value = '';
+            mostrarEstado('🔍 Listo.', 'normal');
+            map.setView([11.9280, -85.9580], 16);
+        }
+
+        document.getElementById('inputLugar').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') buscarLugar();
+        });
+    </script>
+</body>
+</html>
